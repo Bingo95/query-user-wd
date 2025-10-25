@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>WD 查询</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -10,14 +10,16 @@
     <main class="container">
       <h1>WD 查询</h1>
 
-      <label for="mobile">请输入手机号：</label>
-      <div class="row">
-        <input id="mobile" type="tel" placeholder="例如：13958119568" maxlength="11" />
-        <button id="queryBtn">查询</button>
+      <label for="mobile">请输入手机号（支持多个，逗号或换行分隔）：</label>
+      <div class="row-col">
+        <textarea id="mobile" rows="4" placeholder="例如：13958119568 或 13958119568,13800000000"></textarea>
+        <div class="controls">
+          <button id="queryBtn">查询</button>
+        </div>
       </div>
 
       <div id="info" class="info"></div>
-      <div id="result" class="result" aria-live="polite"></div>
+      <div id="results" class="result-list" aria-live="polite"></div>
     </main>
 
     <script src="script.js"></script>

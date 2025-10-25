@@ -1,71 +1,114 @@
-// script.js — 处理用户交互并调用接口
+// script-multi.js — 支持批量手机号查询，每个手机号单独请求并显示结果
 const mobileInput = document.getElementById('mobile');
 const queryBtn = document.getElementById('queryBtn');
 const infoDiv = document.getElementById('info');
-const resultDiv = document.getElementById('result');
+const resultsDiv = document.getElementById('results');
 
 function showInfo(text) {
   infoDiv.textContent = text;
 }
 
-function showResult(text) {
-  resultDiv.textContent = text;
+function createOrGetRow(mobile) {
+  let row = resultsDiv.querySelector(`[data-mobile="${mobile}"]`);
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'result-item';
+    row.setAttribute('data-mobile', mobile);
+    row.innerHTML = `<strong>${mobile}</strong><span class="status">等待</span>`;
+    resultsDiv.appendChild(row);
+  }
+  return row;
+}
+
+function updateRow(mobile, text, cls) {
+  const row = createOrGetRow(mobile);
+  const status = row.querySelector('.status');
+  status.textContent = text;
+  row.classList.remove('ok', 'err', 'pending');
+  if (cls) row.classList.add(cls);
 }
 
 function validateMobile(m) {
-  // 简单校验：11 位数字且以 1 开头（中国手机号）
   return /^1\d{10}$/.test(m);
 }
 
-async function queryWd(mobile) {
+async function fetchWdFor(mobile) {
   const url = `https://wd.api-app-prod.yuanlingshijie.com/dev/getWd?mobile=${encodeURIComponent(
     mobile
   )}`;
-  showInfo('正在查询…');
-  showResult('');
-  queryBtn.disabled = true;
+  updateRow(mobile, '正在查询…', 'pending');
   try {
     const resp = await fetch(url, { method: 'GET' });
     if (!resp.ok) throw new Error(`网络错误：${resp.status}`);
     const json = await resp.json();
-    // 期望返回结构示例：{"code":"00000","msg":null,"data":63722.90,...}
     if (json && (json.success === true || json.code === '00000')) {
       if (json.data === null || json.data === undefined) {
-        showResult('接口返回但没有 data 值');
+        updateRow(mobile, '接口返回但没有 data 值', 'err');
       } else {
-        // 显示为带两位小数的数字
         const val =
           typeof json.data === 'number' ? json.data : Number(json.data);
         if (Number.isNaN(val)) {
-          showResult(`返回的 data 不是数字：${json.data}`);
+          updateRow(mobile, `返回的 data 不是数字：${json.data}`, 'err');
         } else {
-          showResult(`WD: ${val.toFixed(2)}`);
+          updateRow(mobile, `WD: ${val.toFixed(2)}`, 'ok');
         }
       }
-      showInfo('查询成功');
     } else {
       const errmsg = json && (json.msg || json.message || JSON.stringify(json));
-      showInfo(`接口返回异常: ${errmsg}`);
+      updateRow(mobile, `接口返回异常: ${errmsg}`, 'err');
     }
   } catch (err) {
-    showInfo(`请求失败：${err.message}`);
-  } finally {
-    queryBtn.disabled = false;
+    updateRow(mobile, `请求失败：${err.message}`, 'err');
   }
 }
 
-queryBtn.addEventListener('click', () => {
-  const mobile = mobileInput.value.trim();
+queryBtn.addEventListener('click', async () => {
+  const raw = mobileInput.value || '';
   showInfo('');
-  showResult('');
-  if (!validateMobile(mobile)) {
-    showInfo('请输入有效的 11 位手机号（示例：13958119568）');
+  resultsDiv.innerHTML = '';
+
+  const parts = raw
+    .split(/[,;，；\s\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    showInfo('请至少输入一个手机号（逗号或换行分隔）');
     return;
   }
-  queryWd(mobile);
+
+  const MAX = 50;
+  if (parts.length > MAX) {
+    showInfo(`一次最多查询 ${MAX} 个手机号，请分批查询`);
+    return;
+  }
+
+  const seen = new Set();
+  const mobiles = [];
+  for (const p of parts) {
+    if (!seen.has(p)) {
+      seen.add(p);
+      mobiles.push(p);
+    }
+  }
+
+  queryBtn.disabled = true;
+  const promises = mobiles.map((m) => {
+    if (!validateMobile(m)) {
+      updateRow(m, '无效的手机号格式', 'err');
+      return Promise.resolve();
+    }
+    createOrGetRow(m);
+    return fetchWdFor(m);
+  });
+
+  await Promise.allSettled(promises);
+  showInfo('查询完成');
+  queryBtn.disabled = false;
 });
 
-// 支持回车触发查询
 mobileInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') queryBtn.click();
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    queryBtn.click();
+  }
 });
